@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UrbanGround Voice</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      padding: 24px;
+    }
+
+    h1 { font-size: 1.4rem; letter-spacing: 0.05em; color: #aaa; }
+
+    #mic-btn {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      border: 3px solid #555;
+      background: #1e1e1e;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    #mic-btn svg { pointer-events: none; }
+
+    #mic-btn:hover { border-color: #888; }
+
+    #mic-btn.listening {
+      border-color: #e05;
+      box-shadow: 0 0 0 6px rgba(238, 0, 85, 0.25);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 6px rgba(238, 0, 85, 0.25); }
+      50%       { box-shadow: 0 0 0 14px rgba(238, 0, 85, 0.08); }
+    }
+
+    #status {
+      font-size: 0.85rem;
+      color: #666;
+      min-height: 1.2em;
+      text-align: center;
+    }
+
+    #transcript-box {
+      width: 100%;
+      max-width: 560px;
+      min-height: 120px;
+      background: #1a1a1a;
+      border: 1px solid #2e2e2e;
+      border-radius: 12px;
+      padding: 18px 20px;
+      font-size: 1.05rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: #ddd;
+    }
+
+    #transcript-box .interim { color: #888; font-style: italic; }
+
+    #tts-btn {
+      padding: 10px 28px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #222;
+      color: #ccc;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #tts-btn:hover { background: #2e2e2e; }
+    #tts-btn:active { background: #333; }
+  </style>
+</head>
+<body>
+
+  <h1>UrbanGround &mdash; Voice Scaffold</h1>
+
+  <button id="mic-btn" title="Hold to record">
+    <!-- microphone icon -->
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+         stroke="#bbb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"/>
+      <path d="M19 10a7 7 0 0 1-14 0"/>
+      <line x1="12" y1="19" x2="12" y2="22"/>
+      <line x1="8"  y1="22" x2="16" y2="22"/>
+    </svg>
+  </button>
+
+  <div id="status">Click the mic to start listening</div>
+
+  <div id="transcript-box"><span id="final-text"></span><span id="interim-text" class="interim"></span></div>
+
+  <button id="tts-btn">Speak hardcoded text</button>
+
+  <script>
+    const micBtn      = document.getElementById('mic-btn');
+    const statusEl    = document.getElementById('status');
+    const finalEl     = document.getElementById('final-text');
+    const interimEl   = document.getElementById('interim-text');
+    const ttsBtn      = document.getElementById('tts-btn');
+
+    // ── Speech Recognition ────────────────────────────────────────────────
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      statusEl.textContent = 'Speech Recognition not supported in this browser.';
+      micBtn.disabled = true;
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.continuous      = true;
+      recognition.interimResults  = true;
+      recognition.lang            = 'en-US';
+      recognition.maxAlternatives = 1;
+
+      let listening    = false;
+      let wantListen   = false;   // true while the user intends to record
+
+      micBtn.addEventListener('click', async () => {
+        if (!listening) {
+          wantListen = true;
+          statusEl.textContent = 'Requesting microphone…';
+
+          // Explicitly request mic permission first — this forces the
+          // browser to properly grant access before SpeechRecognition starts.
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Stop the tracks immediately; we just needed the permission grant.
+            stream.getTracks().forEach(t => t.stop());
+            console.log('[STT] Mic permission granted, starting recognition…');
+          } catch (err) {
+            console.error('[STT] Mic permission denied:', err);
+            statusEl.textContent = 'Microphone access denied.';
+            wantListen = false;
+            return;
+          }
+
+          try {
+            recognition.start();
+            console.log('[STT] recognition.start() called');
+          } catch (err) {
+            console.error('[STT] recognition.start() error:', err);
+            statusEl.textContent = `Error starting: ${err.message}`;
+            wantListen = false;
+          }
+        } else {
+          wantListen = false;
+          recognition.stop();
+          console.log('[STT] recognition.stop() called');
+        }
+      });
+
+      recognition.onstart = () => {
+        listening = true;
+        micBtn.classList.add('listening');
+        statusEl.textContent = 'Listening…';
+        console.log('[STT] onstart fired');
+      };
+
+      recognition.onaudiostart = () => {
+        console.log('[STT] onaudiostart — audio is flowing');
+      };
+
+      recognition.onsoundstart = () => {
+        console.log('[STT] onsoundstart — sound detected');
+      };
+
+      recognition.onspeechstart = () => {
+        console.log('[STT] onspeechstart — speech detected');
+      };
+
+      recognition.onresult = (e) => {
+        console.log('[STT] onresult', e.results);
+        let finalChunk = '';
+        let interimChunk = '';
+
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const text = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalChunk += text + ' ';
+          } else {
+            interimChunk += text;
+          }
+        }
+
+        if (finalChunk) finalEl.textContent += finalChunk;
+        interimEl.textContent = interimChunk;
+      };
+
+      recognition.onend = () => {
+        console.log('[STT] onend fired — wantListen:', wantListen);
+        listening = false;
+
+        // Chrome may silently kill recognition after ~60 s of silence.
+        // If the user still wants to listen, restart automatically.
+        if (wantListen) {
+          console.log('[STT] Auto-restarting…');
+          try { recognition.start(); } catch (_) { /* already started */ }
+          return;
+        }
+
+        micBtn.classList.remove('listening');
+        interimEl.textContent = '';
+        statusEl.textContent = 'Click the mic to start listening';
+      };
+
+      recognition.onerror = (e) => {
+        console.error('[STT] onerror:', e.error, e.message);
+
+        // "aborted" fires when we intentionally stop — not a real error
+        if (e.error === 'aborted') return;
+
+        // "no-speech" just means silence; keep going if user wants
+        if (e.error === 'no-speech') {
+          statusEl.textContent = 'No speech detected — still listening…';
+          return;
+        }
+
+        // "network" means Chrome can't reach Google's speech servers —
+        // usually caused by an extension blocking the connection.
+        if (e.error === 'network') {
+          statusEl.textContent = 'Network error — try Incognito mode (Ctrl+Shift+N) or use Edge';
+          console.warn('[STT] Network error: Chrome sends audio to Google servers for transcription. ' +
+            'An extension (ad blocker, Grammarly, etc.) may be blocking the connection. ' +
+            'Try: 1) Chrome Incognito  2) Microsoft Edge  3) Disable extensions');
+        } else {
+          statusEl.textContent = `Error: ${e.error}`;
+        }
+        wantListen = false;
+        listening  = false;
+        micBtn.classList.remove('listening');
+      };
+    }
+
+    // ── Text-to-Speech ────────────────────────────────────────────────────
+    const HARDCODED = "Welcome to UrbanGround. Your voice assistant is ready.";
+
+    ttsBtn.addEventListener('click', () => {
+      if (!window.speechSynthesis) {
+        alert('SpeechSynthesis not supported in this browser.');
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(HARDCODED);
+      utt.lang  = 'en-US';
+      utt.rate  = 1;
+      utt.pitch = 1;
+      window.speechSynthesis.speak(utt);
+    });
+  </script>
+</body>
+</html>

@@ -124,6 +124,35 @@
     let listening = false;
     let stream;
 
+    async function sendToBackend(text) {
+      if (!text.trim()) return;
+      statusEl.textContent = 'Thinking...';
+      try {
+        const res = await fetch('http://localhost:3000/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text.trim() })
+        });
+        const data = await res.json();
+        if (data.reply) {
+          finalEl.textContent += `\n\n[Gemma]: ${data.reply}\n\n`;
+          speakReply(data.reply);
+          statusEl.textContent = 'Click the mic to start listening';
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Error connecting to backend';
+      }
+    }
+
+    function speakReply(text) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = 'en-US';
+      window.speechSynthesis.speak(utt);
+    }
+
     micBtn.addEventListener('click', async () => {
       if (!listening) {
         statusEl.textContent = 'Requesting microphone…';
@@ -136,7 +165,9 @@
         }
 
         statusEl.textContent = 'Connecting to Deepgram…';
-        socket = new WebSocket('wss://api.deepgram.com/v1/listen', ['token', DEEPGRAM_API_KEY]);
+        socket = new WebSocket('wss://api.deepgram.com/v1/listen?endpointing=500', ['token', DEEPGRAM_API_KEY]);
+
+        let currentUtterance = '';
 
         socket.onopen = () => {
           console.log('[STT] Connected to Deepgram');
@@ -163,6 +194,12 @@
             if (transcript && received.is_final) {
               finalEl.textContent += transcript + ' ';
               interimEl.textContent = '';
+              currentUtterance += transcript + ' ';
+              
+              if (received.speech_final) {
+                sendToBackend(currentUtterance);
+                currentUtterance = '';
+              }
             } else if (transcript) {
               interimEl.textContent = transcript;
             }

@@ -116,138 +116,97 @@
     const interimEl   = document.getElementById('interim-text');
     const ttsBtn      = document.getElementById('tts-btn');
 
-    // ── Speech Recognition ────────────────────────────────────────────────
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    // ── Speech Recognition (Deepgram) ─────────────────────────────────────
+    const DEEPGRAM_API_KEY = 'DEEPGRAM_KEY';
 
-    if (!SpeechRecognition) {
-      statusEl.textContent = 'Speech Recognition not supported in this browser.';
-      micBtn.disabled = true;
-    } else {
-      const recognition = new SpeechRecognition();
-      recognition.continuous      = true;
-      recognition.interimResults  = true;
-      recognition.lang            = 'en-US';
-      recognition.maxAlternatives = 1;
+    let socket;
+    let mediaRecorder;
+    let listening = false;
+    let stream;
 
-      let listening    = false;
-      let wantListen   = false;   // true while the user intends to record
-
-      micBtn.addEventListener('click', async () => {
-        if (!listening) {
-          wantListen = true;
-          statusEl.textContent = 'Requesting microphone…';
-
-          // Explicitly request mic permission first — this forces the
-          // browser to properly grant access before SpeechRecognition starts.
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // Stop the tracks immediately; we just needed the permission grant.
-            stream.getTracks().forEach(t => t.stop());
-            console.log('[STT] Mic permission granted, starting recognition…');
-          } catch (err) {
-            console.error('[STT] Mic permission denied:', err);
-            statusEl.textContent = 'Microphone access denied.';
-            wantListen = false;
-            return;
-          }
-
-          try {
-            recognition.start();
-            console.log('[STT] recognition.start() called');
-          } catch (err) {
-            console.error('[STT] recognition.start() error:', err);
-            statusEl.textContent = `Error starting: ${err.message}`;
-            wantListen = false;
-          }
-        } else {
-          wantListen = false;
-          recognition.stop();
-          console.log('[STT] recognition.stop() called');
-        }
-      });
-
-      recognition.onstart = () => {
-        listening = true;
-        micBtn.classList.add('listening');
-        statusEl.textContent = 'Listening…';
-        console.log('[STT] onstart fired');
-      };
-
-      recognition.onaudiostart = () => {
-        console.log('[STT] onaudiostart — audio is flowing');
-      };
-
-      recognition.onsoundstart = () => {
-        console.log('[STT] onsoundstart — sound detected');
-      };
-
-      recognition.onspeechstart = () => {
-        console.log('[STT] onspeechstart — speech detected');
-      };
-
-      recognition.onresult = (e) => {
-        console.log('[STT] onresult', e.results);
-        let finalChunk = '';
-        let interimChunk = '';
-
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const text = e.results[i][0].transcript;
-          if (e.results[i].isFinal) {
-            finalChunk += text + ' ';
-          } else {
-            interimChunk += text;
-          }
+    micBtn.addEventListener('click', async () => {
+      if (!listening) {
+        statusEl.textContent = 'Requesting microphone…';
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          console.error('[STT] Mic permission denied:', err);
+          statusEl.textContent = 'Microphone access denied.';
+          return;
         }
 
-        if (finalChunk) finalEl.textContent += finalChunk;
-        interimEl.textContent = interimChunk;
-      };
+        statusEl.textContent = 'Connecting to Deepgram…';
+        socket = new WebSocket('wss://api.deepgram.com/v1/listen', ['token', DEEPGRAM_API_KEY]);
 
-      recognition.onend = () => {
-        console.log('[STT] onend fired — wantListen:', wantListen);
+        socket.onopen = () => {
+          console.log('[STT] Connected to Deepgram');
+          listening = true;
+          micBtn.classList.add('listening');
+          statusEl.textContent = 'Listening…';
+          interimEl.textContent = '';
+
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.addEventListener('dataavailable', event => {
+            if (event.data.size > 0 && socket.readyState === 1) {
+              socket.send(event.data);
+            }
+          });
+          mediaRecorder.start(250);
+        };
+
+        socket.onmessage = (message) => {
+          const received = JSON.parse(message.data);
+          
+          if (received.channel && received.channel.alternatives && received.channel.alternatives.length > 0) {
+            const transcript = received.channel.alternatives[0].transcript;
+
+            if (transcript && received.is_final) {
+              finalEl.textContent += transcript + ' ';
+              interimEl.textContent = '';
+            } else if (transcript) {
+              interimEl.textContent = transcript;
+            }
+          }
+        };
+
+        socket.onclose = () => {
+          console.log('[STT] Connection closed');
+          listening = false;
+          micBtn.classList.remove('listening');
+          statusEl.textContent = 'Click the mic to start listening';
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
+        };
+
+        socket.onerror = (error) => {
+          console.error('[STT] WebSocket Error:', error);
+          statusEl.textContent = 'Error connecting to Deepgram';
+        };
+
+      } else {
+        // Stop listening
         listening = false;
-
-        // Chrome may silently kill recognition after ~60 s of silence.
-        // If the user still wants to listen, restart automatically.
-        if (wantListen) {
-          console.log('[STT] Auto-restarting…');
-          try { recognition.start(); } catch (_) { /* already started */ }
-          return;
-        }
-
         micBtn.classList.remove('listening');
-        interimEl.textContent = '';
-        statusEl.textContent = 'Click the mic to start listening';
-      };
-
-      recognition.onerror = (e) => {
-        console.error('[STT] onerror:', e.error, e.message);
-
-        // "aborted" fires when we intentionally stop — not a real error
-        if (e.error === 'aborted') return;
-
-        // "no-speech" just means silence; keep going if user wants
-        if (e.error === 'no-speech') {
-          statusEl.textContent = 'No speech detected — still listening…';
-          return;
+        statusEl.textContent = 'Closing connection…';
+        
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
         }
-
-        // "network" means Chrome can't reach Google's speech servers —
-        // usually caused by an extension blocking the connection.
-        if (e.error === 'network') {
-          statusEl.textContent = 'Network error — try Incognito mode (Ctrl+Shift+N) or use Edge';
-          console.warn('[STT] Network error: Chrome sends audio to Google servers for transcription. ' +
-            'An extension (ad blocker, Grammarly, etc.) may be blocking the connection. ' +
-            'Try: 1) Chrome Incognito  2) Microsoft Edge  3) Disable extensions');
-        } else {
-          statusEl.textContent = `Error: ${e.error}`;
+        
+        if (socket && socket.readyState === 1) {
+          // Send an empty JSON message as Deepgram recommends, or an empty byte buffer.
+          // Deepgram officially requires sending an empty message to indicate end of stream 
+          // (which usually is an empty byte array).
+          socket.send(new Uint8Array(0));
+        } else if (socket) {
+           socket.close();
         }
-        wantListen = false;
-        listening  = false;
-        micBtn.classList.remove('listening');
-      };
-    }
+      }
+    });
 
     // ── Text-to-Speech ────────────────────────────────────────────────────
     const HARDCODED = "Welcome to UrbanGround. Your voice assistant is ready.";

@@ -86,6 +86,91 @@
     }
     #tts-btn:hover { background: #2e2e2e; }
     #tts-btn:active { background: #333; }
+
+    .input-group {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    #chat-input {
+      flex: 1;
+      padding: 14px 18px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #222;
+      color: #e8e8e8;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #chat-input:focus {
+      border-color: #888;
+    }
+
+    #send-btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      border: 1px solid #e05;
+      background: #e05;
+      color: #fff;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    #send-btn:hover { background: #ff1a6b; border-color: #ff1a6b; }
+    #send-btn:active { transform: scale(0.96); }
+
+    /* DB Test Panel */
+    .db-panel {
+      width: 100%;
+      max-width: 560px;
+      margin-top: 32px;
+      padding: 16px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 12px;
+    }
+    .db-panel h2 {
+      font-size: 1.1rem;
+      color: #aaa;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .db-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .db-buttons button {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #222;
+      color: #ccc;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .db-buttons button:hover { background: #2e2e2e; }
+    #db-output {
+      background: #000;
+      border: 1px solid #222;
+      padding: 12px;
+      border-radius: 6px;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
   </style>
 </head>
 <body>
@@ -107,7 +192,23 @@
 
   <div id="transcript-box"><span id="final-text"></span><span id="interim-text" class="interim"></span></div>
 
+  <div class="input-group">
+    <input type="text" id="chat-input" placeholder="Type a message..." />
+    <button id="send-btn">Send</button>
+  </div>
+
   <button id="tts-btn">Speak hardcoded text</button>
+
+  <div class="db-panel">
+    <h2>Database Testing</h2>
+    <div class="db-buttons">
+      <button id="btn-create-task">Create Task</button>
+      <button id="btn-list-tasks">List Tasks</button>
+      <button id="btn-update-task">Update First Task</button>
+      <button id="btn-delete-task">Delete First Task</button>
+    </div>
+    <div id="db-output">Awaiting DB action...</div>
+  </div>
 
   <script>
     const micBtn      = document.getElementById('mic-btn');
@@ -115,6 +216,8 @@
     const finalEl     = document.getElementById('final-text');
     const interimEl   = document.getElementById('interim-text');
     const ttsBtn      = document.getElementById('tts-btn');
+    const chatInput   = document.getElementById('chat-input');
+    const sendBtn     = document.getElementById('send-btn');
 
     // ── Speech Recognition (Deepgram) ─────────────────────────────────────
     const DEEPGRAM_API_KEY = 'DEEPGRAM_KEY';
@@ -259,6 +362,92 @@
       utt.rate  = 1;
       utt.pitch = 1;
       window.speechSynthesis.speak(utt);
+    });
+
+    // ── Text Input ────────────────────────────────────────────────────────
+    async function handleSend() {
+      const text = chatInput.value;
+      if (!text.trim()) return;
+      chatInput.value = '';
+      finalEl.textContent += `\n\n[You]: ${text}\n\n`;
+      await sendToBackend(text);
+    }
+
+    sendBtn.addEventListener('click', handleSend);
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        handleSend();
+      }
+    });
+
+    // ── Database Test Logic ───────────────────────────────────────────────
+    const dbOutput = document.getElementById('db-output');
+
+    function logDB(msg, data) {
+      dbOutput.textContent = `${msg}\n${JSON.stringify(data, null, 2)}`;
+    }
+
+    document.getElementById('btn-create-task').addEventListener('click', async () => {
+      try {
+        const res = await fetch('http://localhost:3000/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Test Task ' + Math.floor(Math.random() * 1000) })
+        });
+        const data = await res.json();
+        logDB('Created Task:', data);
+      } catch (err) {
+        logDB('Error creating task:', err);
+      }
+    });
+
+    document.getElementById('btn-list-tasks').addEventListener('click', async () => {
+      try {
+        const res = await fetch('http://localhost:3000/api/tasks');
+        const data = await res.json();
+        logDB('List of Tasks:', data);
+      } catch (err) {
+        logDB('Error listing tasks:', err);
+      }
+    });
+
+    document.getElementById('btn-update-task').addEventListener('click', async () => {
+      try {
+        const listRes = await fetch('http://localhost:3000/api/tasks');
+        const tasks = await listRes.json();
+        if (tasks.length === 0) return logDB('No tasks to update.', {});
+        
+        const firstTaskId = tasks[0].id;
+        const newStatus = tasks[0].status === 'pending' ? 'done' : 'pending';
+        
+        const res = await fetch(`http://localhost:3000/api/tasks/${firstTaskId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+        const data = await res.json();
+        logDB('Updated Task:', data);
+      } catch (err) {
+        logDB('Error updating task:', err);
+      }
+    });
+
+    document.getElementById('btn-delete-task').addEventListener('click', async () => {
+      try {
+        const listRes = await fetch('http://localhost:3000/api/tasks');
+        const tasks = await listRes.json();
+        if (tasks.length === 0) return logDB('No tasks to delete.', {});
+        
+        const firstTaskId = tasks[0].id;
+        
+        const res = await fetch(`http://localhost:3000/api/tasks/${firstTaskId}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        logDB('Deleted Task:', data);
+      } catch (err) {
+        logDB('Error deleting task:', err);
+      }
     });
   </script>
 </body>

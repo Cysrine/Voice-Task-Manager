@@ -1,5 +1,5 @@
 *.txt
 /node_modules
-*.json
 *.js
 !server.js
+.env

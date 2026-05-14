@@ -19,21 +19,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname, options)); // Serve static files from this directory
 
-// 1. Read the Groq API key from key.txt
-let groqKey = '';
-try {
-  const keysPath = path.join(__dirname, 'key.txt');
-  const keysContent = fs.readFileSync(keysPath, 'utf8');
-  const match = keysContent.match(/Groq:\s*(.+)/i);
-  if (match) {
-    groqKey = match[1].trim();
-  }
-} catch (err) {
-  console.error('Failed to read key.txt:', err.message);
-}
+// 1. Read the Groq API key from environment variables
+const groqKey = process.env.GROQ_KEY;
 
 if (!groqKey) {
-  console.error('FATAL: Groq API key not found in key.txt');
+  console.error('FATAL: GROQ_KEY environment variable is not set');
   process.exit(1);
 }
 
@@ -43,6 +33,13 @@ const groq = new Groq({ apiKey: groqKey });
 // 3. Optional: Store some basic conversation history to make it a continuous chat
 // Note: In a real app, you'd store this per user/session.
 let chatHistory = [];
+
+// Endpoint to provide public config to the frontend
+app.get('/api/config', (req, res) => {
+  res.json({
+    deepgramKey: process.env.DEEPGRAM_KEY
+  });
+});
 
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;

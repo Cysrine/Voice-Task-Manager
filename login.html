@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UrbanGround — Sign In</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .auth-container {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      letter-spacing: 0.05em;
+      color: #aaa;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .auth-card {
+      background: #1a1a1a;
+      border: 1px solid #2e2e2e;
+      border-radius: 12px;
+      padding: 32px 28px;
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      color: #666;
+      font-size: 0.95rem;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+    }
+
+    .auth-tab.active {
+      color: #e8e8e8;
+      border-bottom-color: #e05;
+    }
+
+    .auth-tab:hover {
+      color: #bbb;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e8e8e8;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: #e05;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 12px;
+      background: #e05;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+
+    .submit-btn:hover {
+      background: #c00450;
+    }
+
+    .submit-btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    .error-msg {
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+      color: #f44336;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .success-msg {
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid rgba(76, 175, 80, 0.3);
+      color: #4caf50;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    #signup-fields { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="auth-container">
+    <h1>UrbanGround &mdash; Voice Task Manager</h1>
+
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-signin" onclick="switchTab('signin')">Sign In</button>
+        <button class="auth-tab" id="tab-signup" onclick="switchTab('signup')">Sign Up</button>
+      </div>
+
+      <div id="error-msg" class="error-msg"></div>
+      <div id="success-msg" class="success-msg"></div>
+
+      <form id="auth-form" onsubmit="handleSubmit(event)">
+        <div id="signup-fields">
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" placeholder="Your name" autocomplete="name" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="you@example.com" required autocomplete="email" />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Min 8 characters" required minlength="8" autocomplete="current-password" />
+        </div>
+
+        <button type="submit" class="submit-btn" id="submit-btn">Sign In</button>
+      </form>
+
+    </div>
+  </div>
+
+  <script>
+    let mode = 'signin'; // 'signin' or 'signup'
+
+    // If already logged in, redirect to the app
+    fetch('/api/auth/get-session', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.session) {
+          window.location.href = '/';
+        }
+      })
+      .catch(() => {}); // Not logged in, stay on login page
+
+    function switchTab(tab) {
+      mode = tab;
+      const signinTab = document.getElementById('tab-signin');
+      const signupTab = document.getElementById('tab-signup');
+      const signupFields = document.getElementById('signup-fields');
+      const submitBtn = document.getElementById('submit-btn');
+      const passwordInput = document.getElementById('password');
+
+      clearMessages();
+
+      if (tab === 'signup') {
+        signinTab.classList.remove('active');
+        signupTab.classList.add('active');
+        signupFields.style.display = 'block';
+        submitBtn.textContent = 'Sign Up';
+        passwordInput.autocomplete = 'new-password';
+      } else {
+        signupTab.classList.remove('active');
+        signinTab.classList.add('active');
+        signupFields.style.display = 'none';
+        submitBtn.textContent = 'Sign In';
+        passwordInput.autocomplete = 'current-password';
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('success-msg').style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+      const el = document.getElementById('success-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('error-msg').style.display = 'none';
+    }
+
+    function clearMessages() {
+      document.getElementById('error-msg').style.display = 'none';
+      document.getElementById('success-msg').style.display = 'none';
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      clearMessages();
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const submitBtn = document.getElementById('submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = mode === 'signin' ? 'Signing in...' : 'Signing up...';
+
+      try {
+        if (mode === 'signup') {
+          const name = document.getElementById('name').value.trim();
+          if (!name) {
+            showError('Please enter your name.');
+            return;
+          }
+
+          const res = await fetch('/api/auth/sign-up/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ name, email, password }),
+          });
+
+          if (res.status === 500) {
+            showError('Server error — check that environment variables are set on Vercel.');
+            return;
+          }
+
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : {};
+
+          if (!res.ok) {
+            showError(data.message || 'Sign up failed. Please try again.');
+            return;
+          }
+
+          // Sign-up successful -- Better Auth sets the session cookie automatically
+          window.location.href = '/';
+
+        } else {
+          const res = await fetch('/api/auth/sign-in/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (res.status === 500) {
+            showError('Server error — check that environment variables are set on Vercel.');
+            return;
+          }
+
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : {};
+
+          if (!res.ok) {
+            showError(data.message || 'Invalid email or password.');
+            return;
+          }
+
+          // Sign-in successful -- Better Auth sets the session cookie automatically
+          window.location.href = '/';
+        }
+      } catch (err) {
+        console.error('Auth error:', err);
+        showError('Something went wrong. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = mode === 'signin' ? 'Sign In' : 'Sign Up';
+      }
+    }
+
+  </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 *.txt
 /node_modules
-*.js
-!server.js
+list-models.js
+neon-research.js
 .env
+.claude

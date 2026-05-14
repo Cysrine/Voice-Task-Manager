@@ -1,16 +1,16 @@
-const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const cors = require('cors');
-const Groq = require('groq-sdk');
-require('dotenv').config();
-const { Pool } = require('pg');
-const { toNodeHandler, fromNodeHeaders } = require('better-auth/node');
-const { auth } = require('./auth');
+import express from 'express';
+import cors from 'cors';
+import Groq from 'groq-sdk';
+import 'dotenv/config';
+import { Pool } from 'pg';
+import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
+import { auth } from './auth.js';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+const __dirname = import.meta.dirname;
 
 const options = {
   index: 'Text-Speech.html' // Setting Text-Speech.html as the default page
@@ -257,4 +257,4 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-module.exports = app;
+export default app;

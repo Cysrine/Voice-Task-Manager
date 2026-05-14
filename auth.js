@@ -1,6 +1,6 @@
-const { betterAuth } = require("better-auth");
-const { Pool } = require("pg");
-require("dotenv").config();
+import { betterAuth } from "better-auth";
+import { Pool } from "pg";
+import "dotenv/config";
 
 // Derive the app's base URL: explicit env var > Vercel auto-provided > localhost
 const baseURL = process.env.BETTER_AUTH_URL
@@ -18,7 +18,7 @@ if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
   trustedOrigins.push(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
 }
 
-const auth = betterAuth({
+export const auth = betterAuth({
   baseURL,
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -35,5 +35,3 @@ const auth = betterAuth({
     },
   },
 });
-
-module.exports = { auth };

@@ -17,8 +17,13 @@ const options = {
 };
 
 const app = express();
+const allowedOrigins = [process.env.BETTER_AUTH_URL || 'http://localhost:3000'];
+if (process.env.VERCEL_URL) allowedOrigins.push(`https://${process.env.VERCEL_URL}`);
+if (process.env.VERCEL_BRANCH_URL) allowedOrigins.push(`https://${process.env.VERCEL_BRANCH_URL}`);
+if (process.env.VERCEL_PROJECT_PRODUCTION_URL) allowedOrigins.push(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+
 app.use(cors({
-  origin: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+  origin: allowedOrigins,
   credentials: true,
 }));
 

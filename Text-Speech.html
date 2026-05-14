@@ -219,8 +219,10 @@
         if (data.reply) {
           finalEl.textContent += `[Qwen]: ${data.reply}\n`;
           speakReply(data.reply);
-          statusEl.className = '';
-          statusEl.textContent = 'Click the mic to start listening';
+          listening = true;
+          micBtn.classList.add('listening');
+          statusEl.textContent = 'Listening…';
+          interimEl.textContent = '';
         }
       } catch (err) {
         console.error(err);

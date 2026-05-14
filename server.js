@@ -72,6 +72,7 @@ You must respond in JSON format ONLY matching exactly this schema:
     { "type": "delete_task", "id": "uuid" }
   ]
 }
+If the user's input is unintelligible noise, empty, or completely lacks meaning, respond exactly with "Sorry, I didn't quite catch that." in the speak_text and do not attempt to execute any actions.
 If the user requests to UPDATE or DELETE a task, you MUST set "needsConfirmation": true, and set "speak_text" to ask for explicit confirmation (e.g. "Should I delete the 10 AM task?"). Do NOT set needsConfirmation to true for create operations.
 When the user confirms "yes" in the following turn, output the actions again but with "needsConfirmation": false.
 For update_task, status, title, and due_at are optional and should only be included if they need to change.
@@ -126,7 +127,7 @@ If there are no actions to take, return an empty array for actions.`;
     res.json({ reply: speakText });
   } catch (error) {
     console.error('[ERROR] Failed to generate content or execute plan:', error);
-    res.status(500).json({ error: 'Failed to process request' });
+    res.status(500).json({ error: 'LLM Error' });
   }
 });
 

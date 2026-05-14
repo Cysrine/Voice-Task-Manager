@@ -67,6 +67,21 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// Temporary diagnostic endpoint -- remove after debugging
+app.get('/api/debug-env', (req, res) => {
+  const dbUrl = process.env.DATABASE_URL;
+  res.json({
+    DATABASE_URL_set: !!dbUrl,
+    DATABASE_URL_length: dbUrl ? dbUrl.length : 0,
+    DATABASE_URL_starts: dbUrl ? dbUrl.substring(0, 15) : 'NOT SET',
+    DATABASE_URL_host: (() => { try { return new URL(dbUrl).hostname; } catch { return 'PARSE_ERROR'; } })(),
+    PGHOST: process.env.PGHOST || 'NOT SET',
+    PGDATABASE: process.env.PGDATABASE || 'NOT SET',
+    POSTGRES_HOST: process.env.POSTGRES_HOST || 'NOT SET',
+    POSTGRES_URL_set: !!process.env.POSTGRES_URL,
+  });
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   const { message } = req.body;
   if (!message) {

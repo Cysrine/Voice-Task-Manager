@@ -2,7 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import Groq from 'groq-sdk';
 import 'dotenv/config';
-import { Pool } from 'pg';
+import pg from 'pg';
+const { Pool } = pg;
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth } from './auth.js';
 

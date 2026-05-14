@@ -1,6 +1,5 @@
 *.txt
 /node_modules
 *.json
-list-models.js
-test-gemma.js
-neon-research.js
+*.js
+!server.js

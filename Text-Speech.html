@@ -231,7 +231,7 @@
       if (!text.trim()) return;
       statusEl.textContent = 'Thinking...';
       try {
-        const res = await fetch('http://localhost:3000/chat', {
+        const res = await fetch('http://localhost:3000/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: text.trim() })
@@ -294,10 +294,17 @@
           if (received.channel && received.channel.alternatives && received.channel.alternatives.length > 0) {
             const transcript = received.channel.alternatives[0].transcript;
 
-            if (transcript && received.is_final) {
-              finalEl.textContent += transcript + ' ';
-              interimEl.textContent = '';
-              currentUtterance += transcript + ' ';
+            // Interruption: If the user starts speaking (even partial text), stop TTS
+            if (transcript.trim() && window.speechSynthesis && window.speechSynthesis.speaking) {
+              window.speechSynthesis.cancel();
+            }
+
+            if (received.is_final) {
+              if (transcript) {
+                finalEl.textContent += transcript + ' ';
+                interimEl.textContent = '';
+                currentUtterance += transcript + ' ';
+              }
               
               if (received.speech_final) {
                 sendToBackend(currentUtterance);

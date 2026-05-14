@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI } = require('@google/genai');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 const { Pool } = require('pg');
 
@@ -11,7 +11,7 @@ const pool = new Pool({
 });
 
 const options = {
-    index: 'Text-Speech.html' // Setting Text-Speech.html as the default page
+  index: 'Text-Speech.html' // Setting Text-Speech.html as the default page
 };
 
 const app = express();
@@ -19,32 +19,32 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname, options)); // Serve static files from this directory
 
-// 1. Read the Gemma API key from key.txt
-let gemmaKey = '';
+// 1. Read the Groq API key from key.txt
+let groqKey = '';
 try {
   const keysPath = path.join(__dirname, 'key.txt');
   const keysContent = fs.readFileSync(keysPath, 'utf8');
-  const match = keysContent.match(/Gemma:\s*(.+)/);
+  const match = keysContent.match(/Groq:\s*(.+)/i);
   if (match) {
-    gemmaKey = match[1].trim();
+    groqKey = match[1].trim();
   }
 } catch (err) {
   console.error('Failed to read key.txt:', err.message);
 }
 
-if (!gemmaKey) {
-  console.error('FATAL: Gemma API key not found in key.txt');
+if (!groqKey) {
+  console.error('FATAL: Groq API key not found in key.txt');
   process.exit(1);
 }
 
-// 2. Initialize the Google Gen AI client
-const ai = new GoogleGenAI({ apiKey: gemmaKey });
+// 2. Initialize the Groq client
+const groq = new Groq({ apiKey: groqKey });
 
 // 3. Optional: Store some basic conversation history to make it a continuous chat
 // Note: In a real app, you'd store this per user/session.
 let chatHistory = [];
 
-app.post('/chat', async (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });
@@ -52,27 +52,84 @@ app.post('/chat', async (req, res) => {
 
   console.log(`[USER]: ${message}`);
 
-  // Append user message to history
-  chatHistory.push({ role: 'user', parts: [{ text: message }] });
-
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemma-4-31b-it',
-      contents: chatHistory,
+    // 1. Fetch current tasks
+    const tasksResult = await pool.query('SELECT * FROM tasks ORDER BY created_at DESC');
+    const tasks = tasksResult.rows;
+
+    // 2. Build instructions
+    const nowISO = new Date().toISOString();
+    const systemPrompt = `You are a helpful task manager assistant.
+The current date and time is: ${nowISO}. Use this to interpret relative times like "today", "tomorrow", or "5 PM".
+
+Here is the user's current task list:
+${JSON.stringify(tasks, null, 2)}
+
+You must respond in JSON format ONLY matching exactly this schema:
+{
+  "speak_text": "The conversational reply to say out loud to the user",
+  "needsConfirmation": false,
+  "actions": [
+    { "type": "create_task", "title": "...", "due_at": "..." },
+    { "type": "update_task", "id": "uuid", "status": "done", "title": "...", "due_at": "..." },
+    { "type": "delete_task", "id": "uuid" }
+  ]
+}
+If the user requests to UPDATE or DELETE a task, you MUST set "needsConfirmation": true, and set "speak_text" to ask for explicit confirmation (e.g. "Should I delete the 10 AM task?"). Do NOT set needsConfirmation to true for create operations.
+When the user confirms "yes" in the following turn, output the actions again but with "needsConfirmation": false.
+For update_task, status, title, and due_at are optional and should only be included if they need to change.
+If there are no actions to take, return an empty array for actions.`;
+
+    const recentHistory = chatHistory.slice(-6);
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...recentHistory,
+      { role: 'user', content: message }
+    ];
+
+    const response = await groq.chat.completions.create({
+      model: 'qwen/qwen3-32b',
+      messages: messages,
+      response_format: { type: 'json_object' }
     });
 
-    const reply = response.text;
-    console.log(`[GEMMA]: ${reply}`);
+    const replyText = response.choices[0].message.content;
+    console.log(`[GROQ RAW]: ${replyText}`);
+    
+    // Parse JSON
+    let cleanedText = replyText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+    const actionPlan = JSON.parse(cleanedText);
 
-    // Append model reply to history
-    chatHistory.push({ role: 'model', parts: [{ text: reply }] });
+    // Execute actions
+    if (actionPlan.actions && Array.isArray(actionPlan.actions) && !actionPlan.needsConfirmation) {
+      for (const action of actionPlan.actions) {
+        if (action.type === 'create_task') {
+          await pool.query('INSERT INTO tasks (title, due_at) VALUES ($1, $2)', [action.title, action.due_at || null]);
+          console.log('Executed create_task:', action.title);
+        } else if (action.type === 'update_task') {
+          await pool.query(
+            'UPDATE tasks SET status = COALESCE($1, status), title = COALESCE($2, title), due_at = COALESCE($3, due_at), updated_at = now() WHERE id = $4',
+            [action.status || null, action.title || null, action.due_at || null, action.id]
+          );
+          console.log('Executed update_task:', action.id);
+        } else if (action.type === 'delete_task') {
+          await pool.query('DELETE FROM tasks WHERE id = $1', [action.id]);
+          console.log('Executed delete_task:', action.id);
+        }
+      }
+    }
 
-    res.json({ reply });
+    const speakText = actionPlan.speak_text || "I processed your request.";
+    console.log(`[GROQ SPEAK]: ${speakText}`);
+
+    // Update history
+    chatHistory.push({ role: 'user', content: message });
+    chatHistory.push({ role: 'assistant', content: speakText });
+
+    res.json({ reply: speakText });
   } catch (error) {
-    console.error('[ERROR] Failed to generate content:', error);
-    // Remove the last user message if the call failed
-    chatHistory.pop();
-    res.status(500).json({ error: 'Failed to generate response' });
+    console.error('[ERROR] Failed to generate content or execute plan:', error);
+    res.status(500).json({ error: 'Failed to process request' });
   }
 });
 

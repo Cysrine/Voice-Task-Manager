@@ -9,6 +9,9 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "better-auth": "^1.6.11",
     "cors": "^2.8.6",

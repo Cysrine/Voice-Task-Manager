@@ -8,12 +8,20 @@
     {
       "src": "Text-Speech.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "login.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/server.js"
+    },
+    {
+      "src": "/login.html",
+      "dest": "/login.html"
     },
     {
       "src": "/(.*)",

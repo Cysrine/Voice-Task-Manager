@@ -91,10 +91,47 @@
 
     #transcript-box .interim { color: #888; font-style: italic; }
 
+    .top-bar {
+      position: fixed;
+      top: 0;
+      right: 0;
+      left: 0;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+    }
+
+    #user-name {
+      font-size: 0.8rem;
+      color: #666;
+    }
+
+    #logout-btn {
+      padding: 6px 14px;
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #aaa;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    #logout-btn:hover {
+      background: #333;
+      color: #e8e8e8;
+    }
 
   </style>
 </head>
 <body>
+
+  <div class="top-bar">
+    <span id="user-name"></span>
+    <button id="logout-btn" onclick="handleLogout()">Sign Out</button>
+  </div>
 
   <h1>UrbanGround &mdash; Voice Task Manager</h1>
 
@@ -121,6 +158,27 @@
     const finalEl     = document.getElementById('final-text');
     const interimEl   = document.getElementById('interim-text');
 
+    // ── Auth Check ────────────────────────────────────────────────────────
+    // Verify the user is logged in before showing the app
+    fetch('/api/auth/get-session', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (!data || !data.session) {
+          window.location.href = '/login.html';
+          return;
+        }
+        // Show the user's name in the top bar
+        const userName = data.user?.name || data.user?.email || '';
+        document.getElementById('user-name').textContent = userName;
+      })
+      .catch(() => {
+        window.location.href = '/login.html';
+      });
+
+    async function handleLogout() {
+      await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
+      window.location.href = '/login.html';
+    }
 
     // ── Speech Recognition (Deepgram) ─────────────────────────────────────
     let DEEPGRAM_API_KEY = '';
@@ -144,9 +202,15 @@
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ message: text.trim() })
         });
-        
+
+        if (res.status === 401) {
+          window.location.href = '/login.html';
+          return;
+        }
+
         if (!res.ok) {
           throw new Error(`Backend error: ${res.status}`);
         }

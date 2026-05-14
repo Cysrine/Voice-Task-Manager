@@ -321,7 +321,13 @@
             body: JSON.stringify({ name, email, password }),
           });
 
-          const data = await res.json();
+          if (res.status === 500) {
+            showError('Server error — check that environment variables are set on Vercel.');
+            return;
+          }
+
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : {};
 
           if (!res.ok) {
             showError(data.message || 'Sign up failed. Please try again.');
@@ -339,7 +345,13 @@
             body: JSON.stringify({ email, password }),
           });
 
-          const data = await res.json();
+          if (res.status === 500) {
+            showError('Server error — check that environment variables are set on Vercel.');
+            return;
+          }
+
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : {};
 
           if (!res.ok) {
             showError(data.message || 'Invalid email or password.');
